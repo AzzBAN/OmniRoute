@@ -87,6 +87,17 @@ function findSanitizedNameForOriginal(
       return sanitizedName;
     }
   }
+  // Fallback: compare normalized forms so that the same tool sent with
+  // different formatting (e.g. hyphens vs underscores) is recognised as
+  // the same tool instead of triggering a false collision.
+  const normalizedOriginal = normalizeGeminiToolName(originalName);
+  if (normalizedOriginal) {
+    for (const [sanitizedName, rawName] of toolNameMap.entries()) {
+      if (normalizeGeminiToolName(rawName) === normalizedOriginal) {
+        return sanitizedName;
+      }
+    }
+  }
   return null;
 }
 
@@ -97,7 +108,11 @@ function isSanitizedNameTaken(
 ): boolean {
   if (!(toolNameMap instanceof Map)) return false;
   const mappedOriginalName = toolNameMap.get(sanitizedName);
-  return typeof mappedOriginalName === "string" && mappedOriginalName !== originalName;
+  if (typeof mappedOriginalName !== "string") return false;
+  if (mappedOriginalName === originalName) return false;
+  // Also check normalized forms — "mcp__ows-gde__invoke_service" and
+  // "mcp__ows_gde__invoke_service" are the same tool after sanitization.
+  return normalizeGeminiToolName(mappedOriginalName) !== normalizeGeminiToolName(originalName);
 }
 
 export function sanitizeGeminiToolName(
