@@ -7,7 +7,7 @@ import {
 } from "../helpers/geminiHelper.ts";
 import { DEFAULT_THINKING_GEMINI_SIGNATURE } from "../../config/defaultThinkingSignature.ts";
 import { buildGeminiTools, sanitizeGeminiToolName } from "../helpers/geminiToolsSanitizer.ts";
-import { capMaxOutputTokens, capThinkingBudget } from "../../../src/lib/modelCapabilities.ts";
+import { capMaxOutputTokens, capThinkingBudget, getDefaultThinkingBudget } from "../../../src/lib/modelCapabilities.ts";
 
 /**
  * Direct Claude → Gemini request translator.
@@ -233,7 +233,7 @@ export function claudeToGeminiRequest(model, body, stream, credentials = null) {
       (!modelLower.includes("gemini-2.0") || modelLower.includes("thinking"))
     ) {
       result.generationConfig.thinkingConfig = {
-        thinkingBudget: capThinkingBudget(model, 24576),
+        thinkingBudget: getDefaultThinkingBudget(model) || capThinkingBudget(model, 24576),
         includeThoughts: true,
       };
     }
