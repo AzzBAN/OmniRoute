@@ -51,7 +51,9 @@ export function geminiToClaudeResponse(chunk, state) {
       const isThought = part.thought === true;
 
       // Thinking content → thinking block (always open+close per chunk)
-      if (isThought && part.text) {
+      // A part is thinking if it has thought:true OR carries a thoughtSignature
+      // (Gemini sometimes sends thought text with only the signature, no flag).
+      if ((isThought || hasThoughtSig) && part.text && !part.functionCall) {
         // Close any open text block first
         if (state.openTextBlockIdx !== null) {
           results.push({ type: "content_block_stop", index: state.openTextBlockIdx });
@@ -109,15 +111,10 @@ export function geminiToClaudeResponse(chunk, state) {
       }
 
       // Regular text content → keep text block open across streaming chunks
-      const isRegularText = part.text !== undefined && part.text !== "" && !hasThoughtSig;
-      const isTextAfterThinking =
-        hasThoughtSig &&
-        part.text !== undefined &&
-        part.text !== "" &&
-        !isThought &&
-        !part.functionCall;
+      // Parts with thoughtSignature are already handled by the thinking block above.
+      const isRegularText = part.text !== undefined && part.text !== "" && !hasThoughtSig && !isThought;
 
-      if (isRegularText || isTextAfterThinking) {
+      if (isRegularText) {
         // Open a new text block only if none is open yet
         if (state.openTextBlockIdx === null) {
           const idx = state.contentBlockIndex++;

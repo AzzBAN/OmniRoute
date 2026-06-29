@@ -185,7 +185,10 @@ export function claudeToGeminiRequest(model, body, stream, credentials = null) {
   }
 
   // ── Thinking config ────────────────────────────────────────────
-  // Priority: thinking.budget_tokens (Claude native) > output_config.effort (Claude Code).
+  // Priority: thinking.budget_tokens (Claude native) > output_config.effort (Claude Code)
+  // > default includeThoughts for Gemini 2.5+ models.
+  // Without includeThoughts, the model's reasoning leaks into visible content
+  // instead of being routed to thinking blocks by the response translator. (#4170)
   if (model.startsWith("gemma-4")) {
     // gemma-4 models returns - 400: Thinking budget is not supported for this model
   } else if (body.thinking?.type === "enabled" && body.thinking.budget_tokens) {
@@ -213,6 +216,24 @@ export function claudeToGeminiRequest(model, body, stream, credentials = null) {
     if (budget !== undefined && budget > 0) {
       result.generationConfig.thinkingConfig = {
         thinkingBudget: budget,
+        includeThoughts: true,
+      };
+    }
+  }
+
+  // Default: enable includeThoughts for Gemini 2.5+ models so the upstream
+  // marks thought parts with thought:true. Without this, the model's reasoning
+  // leaks into visible text content on the Claude protocol path. Mirrors the
+  // OpenAI-to-Gemini translator's default (#4170).
+  if (!result.generationConfig.thinkingConfig) {
+    const modelLower = model.toLowerCase();
+    if (
+      modelLower.includes("gemini") &&
+      !modelLower.includes("gemini-1") &&
+      (!modelLower.includes("gemini-2.0") || modelLower.includes("thinking"))
+    ) {
+      result.generationConfig.thinkingConfig = {
+        thinkingBudget: capThinkingBudget(model, 24576),
         includeThoughts: true,
       };
     }
