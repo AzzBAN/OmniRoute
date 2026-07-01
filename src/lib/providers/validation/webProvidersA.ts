@@ -36,7 +36,7 @@ export async function validateDeepSeekWebProvider({ apiKey }: any) {
         Origin: "https://chat.deepseek.com",
         Referer: "https://chat.deepseek.com/",
         "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
         "X-App-Version": "20241129.1",
         "X-Client-Platform": "web",
       },
@@ -95,7 +95,7 @@ export async function validateQwenWebProvider({ apiKey }: any) {
     const headers: Record<string, string> = {
       Accept: "*/*",
       "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
       Origin: "https://chat.qwen.ai",
       Referer: "https://chat.qwen.ai/",
       source: "web",
@@ -182,6 +182,17 @@ export function isGrokAntiBotBlock(body: string | null | undefined): boolean {
   return false;
 }
 
+// Shared IP-reputation / anti-bot guidance (#3474, #5350). The request was rejected
+// before (or independently of) auth — the cookie itself is likely fine. cf_clearance
+// is pinned to the IP + TLS fingerprint + User-Agent that earned it and cannot be
+// replayed from a different machine/IP, so an auth-shaped rejection after a
+// cf_clearance was supplied is almost always this block, not a bad cookie.
+const GROK_IP_REPUTATION_GUIDANCE =
+  "Your sso cookie is likely fine — this is an IP-reputation block on the request, not an " +
+  "auth failure. cf_clearance is pinned to the IP + TLS fingerprint + User-Agent that earned " +
+  "it and cannot be replayed from a different machine/IP. Retry from a residential IP or " +
+  "configure a proxy for grok-web.";
+
 export async function validateGrokWebProvider({ apiKey, providerSpecificData = {} }: any) {
   try {
     const token = extractCookieValue(apiKey, "sso");
@@ -225,14 +236,14 @@ export async function validateGrokWebProvider({ apiKey, providerSpecificData = {
             Origin: "https://grok.com",
             Pragma: "no-cache",
             Referer: "https://grok.com/",
-            "Sec-Ch-Ua": '"Google Chrome";v="147", "Chromium";v="147", "Not(A:Brand";v="24"',
+            "Sec-Ch-Ua": '"Google Chrome";v="149", "Chromium";v="149", "Not(A:Brand";v="24"',
             "Sec-Ch-Ua-Mobile": "?0",
             "Sec-Ch-Ua-Platform": '"macOS"',
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
             "User-Agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
             "x-statsig-id": btoa(statsigMsg),
             "x-xai-request-id": crypto.randomUUID(),
             traceparent: `00-${traceId}-${spanId}-00`,
@@ -291,7 +302,17 @@ export async function validateGrokWebProvider({ apiKey, providerSpecificData = {
       return { valid: true, error: null };
     }
 
+    // Did the user actually supply a cf_clearance cookie? Detect it from the raw
+    // input blob via a real cookie-pair match — NOT extractCookieValue, which
+    // returns the whole bare value for any name when the input has no ";" (#5350).
+    const suppliedCfClearance = /(?:^|;\s*)cf_clearance=[^;\s]+/.test(String(apiKey || ""));
+
     if (response.status === 401) {
+      // With a cf_clearance supplied, a 401 is almost always an IP-reputation block
+      // (the clearance can't be replayed from a different machine), not a bad cookie.
+      if (suppliedCfClearance) {
+        return { valid: false, error: `Grok returned 401. ${GROK_IP_REPUTATION_GUIDANCE}` };
+      }
       return {
         valid: false,
         error: "Invalid SSO cookie — re-paste from grok.com DevTools → Cookies → sso",
@@ -304,8 +325,14 @@ export async function validateGrokWebProvider({ apiKey, providerSpecificData = {
       // messaging — a misleading "invalid cookie" verdict on an IP-reputation
       // block (issue #3474) sends users chasing a cookie that is actually fine.
       //
-      // 1. Auth-shaped → the cookie/session is the problem; re-paste it.
+      // 1. Auth-shaped → the cookie/session is the problem; re-paste it. But when a
+      //    cf_clearance was supplied, this is almost always an IP-reputation block the
+      //    edge surfaced as an auth failure — the clearance can't be replayed from a
+      //    different machine, so re-pasting the cookie will not help (#5350).
       if (/invalid-credentials|unauthenticated|unauthorized/i.test(errorDetail)) {
+        if (suppliedCfClearance) {
+          return { valid: false, error: `Grok returned 403. ${GROK_IP_REPUTATION_GUIDANCE}` };
+        }
         return {
           valid: false,
           error: "Invalid SSO cookie — re-paste from grok.com DevTools → Cookies → sso",
@@ -319,10 +346,7 @@ export async function validateGrokWebProvider({ apiKey, providerSpecificData = {
       if (isCloudflareChallenge(errorDetail) || isGrokAntiBotBlock(errorDetail)) {
         return {
           valid: false,
-          error:
-            "Grok returned 403 (anti-bot/Cloudflare block). Your sso cookie is likely fine — " +
-            "this is an IP-reputation block on the request, not an auth failure. Retry from a " +
-            "residential IP or configure a proxy for grok-web.",
+          error: `Grok returned 403 (anti-bot/Cloudflare block). ${GROK_IP_REPUTATION_GUIDANCE}`,
         };
       }
       // 3. Structured upstream error (e.g. probe model renamed) → surface the body
@@ -385,7 +409,7 @@ export async function validateChatGptWebProvider({ apiKey, providerSpecificData 
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
             "User-Agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:148.0) Gecko/20100101 Firefox/148.0",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
           },
           providerSpecificData
         ),
@@ -480,7 +504,7 @@ export async function validatePerplexityWebProvider({ apiKey, providerSpecificDa
         Referer: "https://www.perplexity.ai/",
         // Firefox 148 — must match the firefox_148 TLS profile of perplexityTlsClient (issue #2459).
         "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:148.0) Gecko/20100101 Firefox/148.0",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
         "X-App-ApiClient": "default",
         "X-App-ApiVersion": "client-1.11.0",
         ...(bearerToken
@@ -577,7 +601,7 @@ export async function validateBlackboxWebProvider({ apiKey, providerSpecificData
         Origin: "https://app.blackbox.ai",
         Referer: "https://app.blackbox.ai/",
         "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/147.0.0.0",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
       },
       providerSpecificData
     );
@@ -607,7 +631,7 @@ export async function validateBlackboxWebProvider({ apiKey, providerSpecificData
         Origin: "https://app.blackbox.ai",
         Referer: "https://app.blackbox.ai/",
         "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/147.0.0.0",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
       },
       providerSpecificData
     );
@@ -678,4 +702,3 @@ export async function validateBlackboxWebProvider({ apiKey, providerSpecificData
     return toValidationErrorResult(error);
   }
 }
-

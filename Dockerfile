@@ -39,7 +39,7 @@ COPY package*.json ./
 # Workspace package manifests MUST be present before `npm ci` so npm materializes
 # the workspace and installs its *workspace-only* deps (e.g. safe-regex,
 # @toon-format/toon — declared in open-sse/package.json, not hoisted to root).
-# Without this, `npm ci` skips them and `npm run build` fails with "Module not
+# Without this, `npm ci` skips them and the application build fails with "Module not
 # found" (root cause of the v3.8.39 Docker build break). workspaces = ["open-sse"].
 COPY open-sse/package.json ./open-sse/package.json
 COPY scripts/build/postinstall.mjs ./scripts/build/postinstall.mjs
@@ -71,8 +71,8 @@ ENV OMNIROUTE_USE_TURBOPACK=0
 # Raise the V8 heap ceiling for the build. The webpack production optimization
 # pass (forced above since Turbopack panics) needs more than V8's default ceiling
 # (~2 GB) for a codebase this size; a memory-constrained Docker build otherwise
-# dies with "FATAL ERROR: ... JavaScript heap out of memory" at `[builder] npm run
-# build` (#4076). NODE_OPTIONS propagates to the spawned `next build` child
+# dies with "FATAL ERROR: ... JavaScript heap out of memory" during the builder
+# stage (#4076). NODE_OPTIONS propagates to the spawned `next build` child
 # (build-next-isolated.mjs → resolveNextBuildEnv spreads process.env). Build-only;
 # the runtime heap is set separately on the runner stage (OMNIROUTE_MEMORY_MB).
 # Override for hosts with more/less RAM: `--build-arg OMNIROUTE_BUILD_MEMORY_MB=6144`.

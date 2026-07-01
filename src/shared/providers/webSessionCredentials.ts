@@ -94,6 +94,13 @@ export const WEB_SESSION_CREDENTIAL_REQUIREMENTS = {
     acceptsFullCookieHeader: false,
     storageKeys: ["token", "access_token", "accessToken"],
   },
+  "copilot-m365-web": {
+    kind: "token",
+    credentialName: "access_token + chathubPath",
+    placeholder: "access_token=...; chathubPath=redacted",
+    acceptsFullCookieHeader: false,
+    storageKeys: ["token", "access_token", "accessToken", "chathubPath", "userTenant"],
+  },
   "t3-web": {
     kind: "cookie",
     credentialName: "convex-session-id + Cookie header",
@@ -121,13 +128,6 @@ export const WEB_SESSION_CREDENTIAL_REQUIREMENTS = {
     placeholder: "hf-chat=... or full Cookie header from huggingface.co",
     acceptsFullCookieHeader: true,
     storageKeys: ["cookie", "hf-chat"],
-  },
-  phind: {
-    kind: "cookie",
-    credentialName: "phind_session",
-    placeholder: "phind_session=... or full Cookie header from phind.com",
-    acceptsFullCookieHeader: true,
-    storageKeys: ["cookie", "phind_session"],
   },
   "poe-web": {
     kind: "cookie",

@@ -46,6 +46,7 @@ import {
   normalizeIntelligentRoutingConfig,
 } from "@/lib/combos/intelligentRouting";
 import { resolveServerErrorMessage } from "@/lib/api/serverErrorMessage";
+import { withDashboardCsrfHeader } from "@/shared/utils/dashboardCsrf";
 import { useTranslations } from "next-intl";
 
 const ModelSelectModal = dynamic(() => import("@/shared/components/ModelSelectModal"), {
@@ -406,7 +407,7 @@ const COMBO_TEMPLATE_FALLBACK = {
   balancedDesc: "Least-used routing to spread demand over time.",
   freeStackTitle: "Free Stack ($0)",
   freeStackDesc:
-    "Round-robin across all free providers: Kiro, Qoder, Qwen, Gemini CLI. Zero cost, never stops.",
+    "Round-robin across free providers: Kiro, Qoder, Qwen, Antigravity CLI. Zero cost, never stops.",
   paidPremiumTitle: "Paid Premium",
   paidPremiumDesc:
     "Round-robin across paid subscriptions: Cursor, Antigravity. Top-tier models, distributed load.",
@@ -866,7 +867,7 @@ export default function CombosPage() {
     try {
       const res = await fetch("/api/combos/test", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await withDashboardCsrfHeader({ "Content-Type": "application/json" }),
         body: JSON.stringify({ comboName: combo.name }),
       });
       const data = await res.json();
@@ -2641,7 +2642,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, combo
   };
 
   const FREE_STACK_PRESET_MODELS = [
-    { model: "gemini-cli/gemini-3-flash-preview", weight: 0 },
+    { model: "agy/gemini-3.5-flash-medium", weight: 0 },
     { model: "kr/claude-sonnet-4.5", weight: 0 },
     { model: "if/kimi-k2-thinking", weight: 0 },
     { model: "if/qwen3-coder-plus", weight: 0 },
